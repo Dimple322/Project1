@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     
     # Qdrant
-    QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_URL: str = "http://qdrant:6333"
     QDRANT_API_KEY: str = "qdrant_key"
     
     # Neo4j
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     
     # LM Studio
     LM_STUDIO_URL: str = "http://localhost:1234"
-    LM_STUDIO_MODEL: str = "lm-studio"
+    LM_STUDIO_MODEL: str = "mistralai/ministral-3-14b-reasoning"
     
     # Logging
     LOG_LEVEL: str = "INFO"
