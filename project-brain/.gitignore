@@ -82,3 +82,7 @@ Thumbs.db
 .idea/
 *.sublime-workspace
 *.sublime-project
+
+# Allow UI library sources
+!ui/lib/
+!ui/lib/**
