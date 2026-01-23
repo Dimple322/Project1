@@ -191,7 +191,7 @@ async def search(
     request: schemas.SearchRequest,
     db: Session = Depends(get_db)
 ):
-    """Search documents using vector similarity"""
+    """Search documents using vector similarity with Qdrant"""
     from embeddings import EmbeddingService
     from qdrant_client import QdrantClient
     
@@ -202,32 +202,53 @@ async def search(
         embedding_service = EmbeddingService()
         query_embedding = embedding_service.embed_text(request.query)
         
+<<<<<<< Updated upstream
         # Search in Qdrant using query_points
+=======
+        # Search in Qdrant using query_points (qdrant-client 1.16.2)
+>>>>>>> Stashed changes
         qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
         qdrant_key = os.getenv("QDRANT_API_KEY", "qdrant_key")
         
         qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_key)
         
+<<<<<<< Updated upstream
         # Use query_points for qdrant-client 1.16.x
         search_response = qdrant.query_points(
+=======
+        # Use query_points for qdrant-client 1.16.2
+        search_results = qdrant.query_points(
+>>>>>>> Stashed changes
             collection_name="documents",
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=request.limit,
             with_payload=True
+<<<<<<< Updated upstream
         )
         search_results = search_response.points if hasattr(search_response, "points") else search_response
+=======
+        ).points
+>>>>>>> Stashed changes
         
         # Build results
         results = []
         for result in search_results:
+<<<<<<< Updated upstream
             payload = result.payload if hasattr(result, "payload") else result.get("payload", {})
             score = result.score if hasattr(result, "score") else result.get("score", 0.0)
+=======
+            payload = result.payload if hasattr(result, 'payload') else {}
+>>>>>>> Stashed changes
             
             results.append(schemas.SearchResult(
                 chunk_id=payload.get("chunk_id", ""),
                 document_id=payload.get("doc_id", ""),
                 text=payload.get("text", "")[:500],  # Truncate for API response
+<<<<<<< Updated upstream
                 score=float(score),
+=======
+                score=float(result.score) if hasattr(result, 'score') else 0.0,
+>>>>>>> Stashed changes
                 page_number=payload.get("page_number"),
                 section_path=payload.get("section_path")
             ))
@@ -271,7 +292,7 @@ async def ask_question(
         
         logger.info(f"Ask: {question}")
         
-        # 1. Search for relevant chunks
+        # 1. Search for relevant chunks using Qdrant
         embedding_service = EmbeddingService()
         query_embedding = embedding_service.embed_text(question)
         
@@ -279,22 +300,36 @@ async def ask_question(
         qdrant_key = os.getenv("QDRANT_API_KEY", "qdrant_key")
         qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_key)
         
+<<<<<<< Updated upstream
         search_response = qdrant.query_points(
+=======
+        # Use query_points for qdrant-client 1.16.2
+        search_results = qdrant.query_points(
+>>>>>>> Stashed changes
             collection_name="documents",
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=max_chunks,
             with_payload=True
+<<<<<<< Updated upstream
         )
         search_results = search_response.points if hasattr(search_response, "points") else search_response
+=======
+        ).points
+>>>>>>> Stashed changes
         
         # 2. Build context from search results
         context_chunks = []
         sources = []
         
         for result in search_results:
+<<<<<<< Updated upstream
             payload = result.payload if hasattr(result, "payload") else result.get("payload", {})
+=======
+            payload = result.payload if hasattr(result, 'payload') else {}
+>>>>>>> Stashed changes
             chunk_text = payload.get("text", "")
             doc_id = payload.get("doc_id", "")
+            score = float(result.score) if hasattr(result, 'score') else 0.0
             
             if chunk_text:
                 context_chunks.append(chunk_text)
@@ -306,7 +341,11 @@ async def ask_question(
                     sources.append({
                         "filename": doc.filename,
                         "doc_id": doc_id,
+<<<<<<< Updated upstream
                         "score": float(score)
+=======
+                        "score": score
+>>>>>>> Stashed changes
                     })
         
         context = "\n---\n".join(context_chunks) if context_chunks else ""
@@ -315,12 +354,24 @@ async def ask_question(
         llm = get_llm_client()
         
         if not llm.is_available():
+<<<<<<< Updated upstream
             logger.warning(f"LLM not available: {llm.last_error or 'unknown error'}")
+=======
+            logger.warning("LLM not available, returning search-only response")
+>>>>>>> Stashed changes
             return {
-                "answer": "LLM service is not available. Search results available instead.",
-                "search_results": [{"text": chunk, "doc_id": sources[i]["doc_id"] if i < len(sources) else ""} for i, chunk in enumerate(context_chunks)],
+                "answer": "LLM service is not available. Here are the most relevant documents instead:",
+                "search_results": [
+                    {
+                        "text": chunk[:200],
+                        "doc_id": sources[i]["doc_id"] if i < len(sources) else "",
+                        "filename": sources[i]["filename"] if i < len(sources) else ""
+                    } 
+                    for i, chunk in enumerate(context_chunks)
+                ],
                 "sources": sources,
-                "status": "search_only"
+                "status": "search_only",
+                "warning": "LLM unavailable"
             }
         
         answer = llm.answer(question, context)
