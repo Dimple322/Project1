@@ -203,29 +203,31 @@ async def search(
         query_embedding = embedding_service.embed_text(request.query)
         
         # Search in Qdrant using query_points
-        qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
-        qdrant_key = os.getenv("QDRANT_API_KEY", "qdrant_key")
+        qdrant_url = settings.QDRANT_URL
+        qdrant_key = settings.QDRANT_API_KEY
         
         qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_key)
         
-        # Use search method with correct parameters
-        search_results = qdrant.search(
+        # Use query_points for qdrant-client 1.16.x
+        search_response = qdrant.query_points(
             collection_name="documents",
             query_vector=query_embedding,
             limit=request.limit,
             with_payload=True
         )
+        search_results = search_response.points if hasattr(search_response, "points") else search_response
         
         # Build results
         results = []
         for result in search_results:
-            payload = result.payload if hasattr(result, 'payload') else result.get('payload', {})
+            payload = result.payload if hasattr(result, "payload") else result.get("payload", {})
+            score = result.score if hasattr(result, "score") else result.get("score", 0.0)
             
             results.append(schemas.SearchResult(
                 chunk_id=payload.get("chunk_id", ""),
                 document_id=payload.get("doc_id", ""),
                 text=payload.get("text", "")[:500],  # Truncate for API response
-                score=float(result.score),
+                score=float(score),
                 page_number=payload.get("page_number"),
                 section_path=payload.get("section_path")
             ))
@@ -273,23 +275,24 @@ async def ask_question(
         embedding_service = EmbeddingService()
         query_embedding = embedding_service.embed_text(question)
         
-        qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
-        qdrant_key = os.getenv("QDRANT_API_KEY", "qdrant_key")
+        qdrant_url = settings.QDRANT_URL
+        qdrant_key = settings.QDRANT_API_KEY
         qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_key)
         
-        search_results = qdrant.search(
+        search_response = qdrant.query_points(
             collection_name="documents",
             query_vector=query_embedding,
             limit=max_chunks,
             with_payload=True
         )
+        search_results = search_response.points if hasattr(search_response, "points") else search_response
         
         # 2. Build context from search results
         context_chunks = []
         sources = []
         
         for result in search_results:
-            payload = result.payload if hasattr(result, 'payload') else result.get('payload', {})
+            payload = result.payload if hasattr(result, "payload") else result.get("payload", {})
             chunk_text = payload.get("text", "")
             doc_id = payload.get("doc_id", "")
             
@@ -299,10 +302,11 @@ async def ask_question(
                 # Get document name
                 doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
                 if doc and doc.filename not in [s["filename"] for s in sources]:
+                    score = result.score if hasattr(result, "score") else result.get("score", 0.0)
                     sources.append({
                         "filename": doc.filename,
                         "doc_id": doc_id,
-                        "score": float(result.score)
+                        "score": float(score)
                     })
         
         context = "\n---\n".join(context_chunks) if context_chunks else ""
@@ -311,7 +315,7 @@ async def ask_question(
         llm = get_llm_client()
         
         if not llm.is_available():
-            logger.warning("LLM not available")
+            logger.warning(f"LLM not available: {llm.last_error or 'unknown error'}")
             return {
                 "answer": "LLM service is not available. Search results available instead.",
                 "search_results": [{"text": chunk, "doc_id": sources[i]["doc_id"] if i < len(sources) else ""} for i, chunk in enumerate(context_chunks)],
@@ -320,6 +324,14 @@ async def ask_question(
             }
         
         answer = llm.answer(question, context)
+        if not answer:
+            logger.warning(f"LLM returned no answer: {llm.last_error or 'unknown error'}")
+            return {
+                "answer": "LLM service is not available. Search results available instead.",
+                "search_results": [{"text": chunk, "doc_id": sources[i]["doc_id"] if i < len(sources) else ""} for i, chunk in enumerate(context_chunks)],
+                "sources": sources,
+                "status": "search_only"
+            }
         
         return {
             "answer": answer or "Could not generate answer",

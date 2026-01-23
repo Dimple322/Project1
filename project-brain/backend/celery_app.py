@@ -157,9 +157,9 @@ def embed_chunks_task(self, document_id: str, version_id: str):
         # Initialize services
         embedding_service = EmbeddingService()
         qdrant = QdrantClient(
-    url=os.getenv("QDRANT_URL", "http://qdrant:6333"),
-    api_key=os.getenv("QDRANT_API_KEY"),
-)
+            url=settings.QDRANT_URL,
+            api_key=settings.QDRANT_API_KEY,
+        )
         
         # Check/create collection
         collection_name = "documents"
